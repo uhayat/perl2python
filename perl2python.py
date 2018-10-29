@@ -1,27 +1,32 @@
 import os
 import sys
 import re
-
-tabCounter = 0
-DebugLog = False
-
-logger = None
-counter = 0
-
-importList = dict()
-
-def LOG(msg):
-	global logger
-	if logger == None:
-		logger = open('log.txt','w+')
-	logger.write(msg)
+import argparse
 
 class Perl2Python():
 
 	def __init__(self,inFilePath, outFilePath=None):
-		# check in exist
+
 		self.inFile = open(inFilePath)
 		self.out = open(outFilePath,'w+')
+		self.tabCounter = 0
+		self.lineCounter = 0
+		self.logger = None
+		self.logFile = 'log.txt'
+		self.importList = dict()
+		self.DebugLog = False
+		self.verbose = False
+
+	def LOG(self, msg):
+		if not self.DebugLog:
+			return
+
+		if self.logger == None:
+			self.logger = open(self.logFile,'w+')
+		self.logger.write(msg)
+
+	def increamentTab(self):
+		self.tabCounter += 1
 	
 	def write(self, data):
 		print (data),
@@ -30,12 +35,12 @@ class Perl2Python():
 	def writeLine(self, data):
 		self.out.write(data + '\n')
 
-	def addIndent(self, count):
-		self.write('\t'*count)
+	def writeIndent(self):
+		self.write('\t'* self.tabCounter)
 
 	def checkSpecialVariable(self, varName):
 		varName = varName.strip()
-		LOG("checkSpecialVariable(): " +varName+'\n')
+		self.LOG("checkSpecialVariable(): " +varName+'\n')
 		
 		lenOp = False
 		if varName.startswith('#'):
@@ -56,23 +61,23 @@ class Perl2Python():
 		return varName
 
 	def replaceVarInString(self, line):
-		LOG("replaceVarInString():" + line + '\n')
+		self.LOG("replaceVarInString():" + line + '\n')
 
 		mo = re.match('(.*)\$(#?[a-zA-Z1-9_!]+){(.*)}(.*)', line)
 		if mo:
-			LOG("Found with array \n")
+			self.LOG("Found with array \n")
 			left = mo.group(1)
 			varName = mo.group(2)
 			index = mo.group(3)
 			right = mo.group(4)
-			LOG('FWA1: ' + left + '~~' + varName + '["' + index + '"]' + '~~' + right  + '\n')
+			self.LOG('FWA1: ' + left + '~~' + varName + '["' + index + '"]' + '~~' + right  + '\n')
 			if left.startswith('"'): left = left +'"'
 			left2 = self.parseExpression(left)
 			middle = self.checkSpecialVariable(varName) + '["' + index + '"]'
 			if right.endswith('"'): right = '"' + right
 			right2 = self.parseExpression(right)
-			LOG('FWA2: ' + left2 + '~~' + middle + '~~' + right2 + '\n')
-			LOG('FWA3: ' + left2 + ' + ' + middle + ' + ' + right2 + '\n')
+			self.LOG('FWA2: ' + left2 + '~~' + middle + '~~' + right2 + '\n')
+			self.LOG('FWA3: ' + left2 + ' + ' + middle + ' + ' + right2 + '\n')
 
 			left = left2
 			right = right2
@@ -84,12 +89,12 @@ class Perl2Python():
 			if right == ' + ""': right = ''
 			
 			newStr = left + middle + right
-			LOG('final: ' + newStr + '\n')
+			self.LOG('final: ' + newStr + '\n')
 			return newStr
 		
 		mo = re.match('(.*)\$(#?[a-zA-Z1-9_!]+)(.*)', line)
 		if False:
-			LOG("Found with array \n")
+			self.LOG("Found with array \n")
 			left = mo.group(1)
 			varName = mo.group(2)
 			right = mo.group(3)
@@ -97,24 +102,24 @@ class Perl2Python():
 			if right.startswith('"'): right = '"' + right
 
 			newStr = self.replaceVarInString(left) + ' + ' + self.checkSpecialVariable(varName) + ' + ' + self.replaceVarInString(right)
-			LOG('final:\n' + newStr + '\n')
+			self.LOG('final:\n' + newStr + '\n')
 			return newStr
 			
 
 		mo = re.match('(.*)\$(#?[a-zA-Z1-9_!\?]+)(.*)', line)
 		if mo:
-			LOG("Found \n")
+			self.LOG("Found \n")
 			left = mo.group(1)
 			middle = mo.group(2)
 			right = mo.group(3)
-			LOG('F1: ' + left + '~~' + middle + '~~' + right + '\n')
+			self.LOG('F1: ' + left + '~~' + middle + '~~' + right + '\n')
 			newStr = ''
 			if left != "":
 				if left.startswith('"'): 
 					left = left + '"'
 				newStr = left + ' + '
 			middle = self.checkSpecialVariable(middle)
-			LOG('F2: ' + left + '~~' + middle + '~~' + right + '\n')
+			self.LOG('F2: ' + left + '~~' + middle + '~~' + right + '\n')
 			postVar = ''
 			if right != "":
 				if right.endswith('"'):
@@ -122,25 +127,25 @@ class Perl2Python():
 				postVar = ' + ' + right
 			m3 = re.match('{([a-zA-Z-!#]*)}(.*)', right)
 			if m3:
-				LOG("Found 0\n")
+				self.LOG("Found 0\n")
 				dictIndex = m3.group(1)
 				fourthVal = m3.group(2)
 				if fourthVal == '"' : fourthVal = ""
 				postVar = '["' + dictIndex +'"]'+ fourthVal
 
 			newStr += middle  + postVar
-			LOG(line+"\n")
-			LOG(newStr+'\n')
+			self.LOG(line+"\n")
+			self.LOG(newStr+'\n')
 			return newStr
 		
 
 		mo = re.match('(.*)\$\?(.*)', line)
 		if mo:
-			LOG('? found \n')
+			self.LOG('? found \n')
 		return line
 
 	def parseExpression(self, expression):
-		LOG('parseExpression(): '+expression + '\n')
+		self.LOG('parseExpression(): '+expression + '\n')
 		expression = expression.strip()
 		expression = expression.rstrip(';')
 		expression = expression.strip()
@@ -148,35 +153,20 @@ class Perl2Python():
 		mo = re.match('(.*)"(.*)"(.*)', expression)
 		if mo:
 			left = mo.group(1)
-			LOG('left: '+left + '\n')
+			self.LOG('left: '+left + '\n')
 			middle = mo.group(2)
-			LOG('midle: '+middle + '\n')
+			self.LOG('midle: '+middle + '\n')
 			right = mo.group(3)
-			LOG('right: '+right + '\n')
+			self.LOG('right: '+right + '\n')
 
 			middle = self.replaceVarInString('"' + middle + '"')
-			LOG('midle2 handled: ' + left +'~' + middle + '~'+ right + '\n')
+			self.LOG('midle2 handled: ' + left +'~' + middle + '~'+ right + '\n')
 			right = self.parseExpression(right)
-			LOG('midle3 handled: ' + left +'~' + middle + '~'+ right + '\n')
+			self.LOG('midle3 handled: ' + left +'~' + middle + '~'+ right + '\n')
 
 			return left + middle + right
 
-
-
-
 		fixed = self.replaceVarInString(expression)
-		#qout = False
-		#if expression.startswith('"') and expression.endswith('"'):
-		#	qout = True
-			#expression = expression.strip('"')
-		#expression = expression.replace('$','')
-		#expression = expression.replace('{','[')
-		#expression = expression.replace('}',']')
-		
-		#LOG('parseExpression(): fixed: '+fixed + '\n')
-		#fixed = re.sub('""\s\+|\+\s""','',fixed)
-		#LOG('parseExpression(): fixed2: '+fixed + '\n')
-		#fixed = re.sub('\+\s"\s\+','+',fixed)
 
 		return fixed
 
@@ -194,11 +184,11 @@ class Perl2Python():
 		
 		mo = re.match('^\s*([a-zA-Z]*)\((.*)\)', line)
 		if mo:
-			#LOG('*** function detected...\n')
-			#LOG(line)
+			#self.LOG('*** function detected...\n')
+			#self.LOG(line)
 			funcName = mo.group(1).strip()
 			argList = mo.group(2).strip()
-			self.addIndent(tabCounter)
+			self.writeIndent()
 			if funcName == 'system':
 				funcName = 'rCode = system'
 			elif funcName == 'open':
@@ -212,20 +202,20 @@ class Perl2Python():
 		return False
 
 	def handleIf(self, line):
-		global tabCounter
+		
 
 		mo = re.match('}*\s*(if|elsif)\s*\((.*)\)(.*)\s*$', line)
 		if mo:
-			LOG("handleIf(): " + line + '\n')
-			#self.write("ifcount " +  tabCounter)
+			self.LOG("handleIf(): " + line + '\n')
+			#self.write("ifcount " +  self.tabCounter)
 			statement = mo.group(1)
 			if statement == 'elsif': statement = 'elif'
 			ifCondition = mo.group(2).strip()
-			self.addIndent(tabCounter)
+			self.writeIndent()
 			self.write(statement + " " )
 			m2 = re.match('(-e|-d)\s*"(.*)', ifCondition)
 			if m2:
-				LOG('FileExistCheck:\n')
+				self.LOG('FileExistCheck:\n')
 				filePath = m2.group(2)
 				filePath = self.parseExpression(filePath)
 				ifCondition = 'os.path.exists('+filePath+')'
@@ -233,73 +223,73 @@ class Perl2Python():
 			else:
 				self.arithmeticLines(ifCondition.strip())
 			self.write(":\n")
-			tabCounter += 1
+			self.increamentTab()
 			return True
 		return False
 
 
 	def handleElse(self, line):
-		global tabCounter
+		
 		mo = re.match('\s*else\s*{*\s*$', line)
 		if mo:
 			#remember to remove } if present
-			self.addIndent(tabCounter)
+			self.writeIndent()
 			self.write("else:\n")
-			tabCounter += 1
+			self.increamentTab()
 			return True
 		return False
 
 	def handleWhile(self, line):
-		global tabCounter
+		
 		line = line.strip()
-		LOG('handleWhile(): ')
+		self.LOG('handleWhile(): ')
 
 		#looping through every line in a FILE 
 		mo = re.match('while\s*(.*)\<\>(.*)\s*(.*)$', line)
 		if mo:
-			LOG('LoopLineInFile2:')
-			self.addIndent(tabCounter)
+			self.LOG('LoopLineInFile2:')
+			self.writeIndent()
 			self.write("import fileinput\n")
-			importList['fileinput'] = 1
-			self.addIndent(tabCounter)
+			self.importList['fileinput'] = 1
+			self.writeIndent()
 			self.write("for line in fileinput.input():\n")
 			return True
 
 		#looping through every line in a FILE 
 		mo = re.match('while\s*\((.*)\s*=\s*\<(.*)\>(.*)\s*(.*)$', line)
 		if mo:
-			LOG('LoopLineInFile2: ')
+			self.LOG('LoopLineInFile2: ')
 			varName = mo.group(1).lstrip('$ ')
 			fileObject = mo.group(2)
-			self.addIndent(tabCounter)
+			self.writeIndent()
 			self.write("for "+varName+" in "+fileObject+".readlines():\n")
-			tabCounter += 1
+			self.increamentTab()
 			return True
 
 		#looping through STDIN (while loop)
 		mo = re.match('\s*while\s*(.*)\<STDIN\>(.*)\s*(.*)\s*$', line)
 		if mo:
-			LOG('SDTIN : ')
-			self.addIndent(tabCounter)
+			self.LOG('SDTIN : ')
+			self.writeIndent()
 			self.write("import sys\n")
-			self.addIndent(tabCounter)
+			self.writeIndent()
 			self.write("for line in sys.stdin:\n")
 			return True
 
 		mo = re.match('(.*)\s*while\s*\((.*)\)(.*)\s*$', line)
 		if mo:
-			LOG('Simple While:')
+			self.LOG('Simple While:')
 			mb = re.match('(.*)\s*while\s*\((.*)\s*\<STDIN\>\s*\)(.*)\s*$', line) #stdin   
 			if mb:
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				self.write("for line in sys.stdin:")
 			else:
 				whileCondition = mo.group(2)
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				self.write("while (")
 				self.arithmeticLines(whileCondition)
 				self.write("):\n")
-				tabCounter += 1
+				self.increamentTab()
 			return True
 
 		return False
@@ -316,34 +306,34 @@ class Perl2Python():
 		return param1
 
 	def evaluateLogical(self, expression):
-		LOG('evaluateLogical(): '+ expression + '\n')
+		self.LOG('evaluateLogical(): '+ expression + '\n')
 		expression = expression.strip()
 		mo = re.match('^(.*)(&&|\|\|)(.*)$',expression)
 		if mo and expression != "":
-			LOG('&& || Group: \n')
+			self.LOG('&& || Group: \n')
 			left = mo.group(1)
 			operator = mo.group(2)
 			right = mo.group(3)
-			LOG("!! Logical [%s] %s [%s]\n"%(left, operator,right))
+			self.LOG("!! Logical [%s] %s [%s]\n"%(left, operator,right))
 			return self.evaluateLogical(left) + ' ' + operator + ' ' + self.evaluateLogical(right)
 
 		expression = self.replaceComparisonOperators(expression)
 		m1 = re.match('(.*)\s*(=\~)\s*(.*)',expression)
 		if m1:
-			LOG('+++++ ' + expression + '\n')
-			LOG('++++! ' + m1.group(2) + '\n')
-			LOG('++++~' + self.checkSpecialVariable(m1.group(1).strip('$@')) + '\n')
+			self.LOG('+++++ ' + expression + '\n')
+			self.LOG('++++! ' + m1.group(2) + '\n')
+			self.LOG('++++~' + self.checkSpecialVariable(m1.group(1).strip('$@')) + '\n')
 			return self.checkSpecialVariable(m1.group(1).strip('$@')) + ' =~ "' + m1.group(3) + '"'
 
 		m2 = re.match('(.*)\s*(==|!=|<=?|>=?)\s*(.*)',expression)
 		if m2:
-			LOG('~~~~ ' + expression + '\n')
-			LOG('~~~! ' + m2.group(2) + '\n')
+			self.LOG('~~~~ ' + expression + '\n')
+			self.LOG('~~~! ' + m2.group(2) + '\n')
 			return self.parseExpression(m2.group(1)) + ' ' + m2.group(2) + ' ' + self.parseExpression(m2.group(3))
 		return  self.parseExpression (expression)
 
 	def arithmeticLines(self, param1):
-		LOG('arithmeticLines(): '+ param1 + '\n')
+		self.LOG('arithmeticLines(): '+ param1 + '\n')
 
 		#param1 = replaceComparisonOperators(param1)
 
@@ -378,39 +368,39 @@ class Perl2Python():
 	def handleComments(self, line):
 		mo = re.match('\s*#', line) or line.strip() == ''
 		if mo:
-			self.addIndent(tabCounter)
+			self.writeIndent()
 			self.write(line.strip() + "\n")
 			return True
 		return False
 
 	def handleForEach(self, line):
-		global tabCounter
+		
 
-		#self.write(tabCounter
+		#self.write(self.tabCounter
 		mo = re.match('\s*foreach\s*\((.*)\)\s*$', line)
 		if mo:
-			#LOG("foreach detected\n")
-			#LOG(line)
+			#self.LOG("foreach detected\n")
+			#self.LOG(line)
 			lst = mo.group(1)
-			#LOG("["+lst+"]\n")
+			#self.LOG("["+lst+"]\n")
 			#for loops (If in C style then no direct comparison)?
 			#foreach (with ARGV) (super specific, could do with broadening in scope)
 			m2 = re.match('\s*foreach\s*\$(.*)\s*\((.*)\)\s*{\s*$', line)
 			if m2:
 				#foreach $i (0..$#ARGV) becomes for i in xrange (len(sys.argv) - 1):
 				variableName = m2.group(1)
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				self.write("for " + variableName + " in xrange (len(sys.argv) - 1):\n")
-				tabCounter += 1
+				self.increamentTab()
 				return True
 			
 			lstName = lst.lstrip('@')
-			#LOG(lstName)
+			#self.LOG(lstName)
 			if lstName == '_': lstName = 'param1'
 			
-			self.addIndent(tabCounter)
+			self.writeIndent()
 			self.write("for param1 in "+lstName+":\n")
-			tabCounter += 1
+			self.increamentTab()
 			return True
 
 		return False
@@ -424,7 +414,7 @@ class Perl2Python():
 			target = mo.group(1).strip()
 			#printInput = '"' + mo.group(2) + '"'
 			printInput =  mo.group(2)
-			self.addIndent(tabCounter)
+			self.writeIndent()
 			if target != '':
 				self.write(target + '.write("' + self.parseExpression(printInput) + '")\n')
 			else:
@@ -436,21 +426,21 @@ class Perl2Python():
 		mo = re.match('\s*print\s*"(.*)"[\s;]*$', line)
 		if mo:
 			printInput = mo.group(1)
-			self.addIndent(tabCounter)
+			self.writeIndent()
 			self.write("print (\""+printInput+"\")\n")
 			return True
 		#print statment with no newline
 		mo = re.match('\s*print\s*"(.*)"[\s;]*$', line)
 		if mo:
 			printInput = mo.group(1)
-			self.addIndent(tabCounter)
+			self.writeIndent()
 			self.write("print (\""+printInput+"\")\n")
 			return True
 		return False
 		
 
 	def handleSed(self, sedExp):
-		LOG('handleSed(): '+ sedExp)
+		self.LOG('handleSed(): '+ sedExp)
 		sedExp = sedExp.strip(' ;')
 		return "evalSed('" + sedExp + "')"
 
@@ -464,7 +454,7 @@ class Perl2Python():
 			varName = varName.strip('$')
 			varName = self.checkSpecialVariable(varName)
 			expression = mo.group(2)
-			self.addIndent(tabCounter)
+			self.writeIndent()
 			self.write(varName + " = " + self.parseExpression(expression).strip() + "\n")
 			return True
 
@@ -474,8 +464,8 @@ class Perl2Python():
 			varName = mo.group(1)
 			varName = self.checkSpecialVariable(varName)
 			expression = mo.group(2)
-			self.addIndent(tabCounter)
-			LOG("global variable: "+ expression + '\n')
+			self.writeIndent()
+			self.LOG("global variable: "+ expression + '\n')
 			# check if it is a sed expression
 			if len(expression) > 0 and expression[0] == '~':
 				self.write(self.handleVarName(varName) + " = " + self.handleSed(expression[1:]) + "\n")
@@ -486,21 +476,19 @@ class Perl2Python():
 		return False
 
 	def DoConversion(self):
-		global counter
-		global tabCounter
 
 		# File iterate
 		for line in self.inFile.readlines():
-			counter += 1
-			LOG("line "+str(counter)+": " +  line)
+			self.lineCounter += 1
+			self.LOG("line "+str(self.lineCounter)+": " +  line)
 			line = line.strip()
 
-			#self.write( " tabCounter "+  tabCounter)
+			#self.write( " self.tabCounter "+  self.tabCounter)
 
 			#NOTE: Deal with semicolons on a line by line basis
 
 			# translate #! line 
-			if line.startswith('#!') and counter == 1:
+			if line.startswith('#!') and self.lineCounter == 1:
 				self.write( "#!/usr/bin/python2.7 -u\n")
 				continue
 
@@ -515,13 +503,13 @@ class Perl2Python():
 			#break/continue	
 			mo = re.match('last;$', line)
 			if mo:
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				self.write( "break\n")
 				continue
 
 			mo = re.match('next;$', line)
 			if mo:
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				self.write( "continue\n")
 				continue
 
@@ -543,7 +531,7 @@ class Perl2Python():
 			#chomp from STDIN
 			mo = re.match('chomp\s*\$(.*)\s*;$', line)
 			if mo:
-				self.addIndent(tabCounter);	
+				self.writeIndent();	
 				self.write( mo.group(1) + " = sys.stdin.readlines()\n")
 				continue
 
@@ -556,7 +544,7 @@ class Perl2Python():
 				if paramName == '$':
 					paramName = 'param1'
 				self.write( "def " + funcProto + "("+paramName+"):\n")
-				tabCounter += 1
+				self.increamentTab()
 				continue
 			
 			# sub routines without paranthesis
@@ -564,34 +552,34 @@ class Perl2Python():
 			if mo:
 				funcProto = mo.group(1)
 				self.write( "def " + funcProto + "():\n")
-				tabCounter += 1
+				self.increamentTab()
 				continue
 
 			#push
 			mo = re.match('^\s*push\s*\(\s*\@(.*)\,\s*(.*)\)\s*;$', line)
 			if mo:
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				self.write( mo.group(1) + ".push(" + mo.group(2).strip('$') + ")\n")
 				continue
 
 			#pop
 			mo = re.match('^\s*pop\s*\@(.*);$', line)
 			if mo:
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				self.write( mo.group(1) + ".pop()\n")
 				continue
 
 			#unshift
 			mo = re.match('^\s*unshift\s*\@(.*)\,\s*(.*)\s*;$', line)
 			if mo:
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				self.write( mo.group(1) + ".unshift(" + mo.group(2) + ")\n")
 				continue
 
 			#pop
 			mo = re.match('^\s*shift\s*\@(.*);$', line)
 			if mo:
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				self.write( mo.group(1) + ".shift\n")
 				continue
 
@@ -600,7 +588,7 @@ class Perl2Python():
 				continue
 			#self.handleFunctionCall(line)
 
-			#LOG('5\n')
+			#self.LOG('5\n')
 			#print statement with newline
 			if self.handlePrint(line):
 				continue
@@ -611,7 +599,7 @@ class Perl2Python():
 				string = mo.group(3)
 				delineator = mo.group(2)
 				assignmentVariable = mo.group(1)
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				self.write( assignmentVariable + " = " + string + '.split("' + delineator + '")\n')
 				continue
 
@@ -621,26 +609,26 @@ class Perl2Python():
 				assignmentVariable = mo.group(1)
 				string = mo.group(3)
 				delineator = mo.group(2)
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				self.write( assignmentVariable + '= ' + delineator + '.join(['+string+ '])')
 				continue
 
-			LOG("*********\n")
-			LOG(line + '\n')
+			self.LOG("*********\n")
+			self.LOG(line + '\n')
 			#arithmetic operations
 			mo = re.match('[^\s]*\s*=(.*);$', line)
 			if mo:
 				if mo == re.match('\@(.*)\s*=\s*(.*);$', line): #arrays are dealt with seperately
 					next
 				else:
-					self.addIndent(tabCounter)
+					self.writeIndent()
 					self.arithmeticLines(line)
 
 			# ++ and --
 			mo = re.match('(.*)\s*\+\+(.*);$', line) 
 			if mo:
 				# change ++ and -- to python equivalents
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				plusPlus = mo.group(1)
 				plusPlus = plusPlus.replace('$','')
 				self.write( plusPlus +"+=1")
@@ -648,7 +636,7 @@ class Perl2Python():
 
 			mo = re.match('(.*)\s*\-\-(.*);$', line)
 			if mo:
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				minusMinus = mo.group(1)
 				minusMinus = minusMinus.replace('$','')
 				self.write( minusMinus +"-= 1")
@@ -657,7 +645,7 @@ class Perl2Python():
 			# return 
 			mo = re.match('^\s*return\s*(.*)', line)
 			if mo:
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				self.write( 'return ' + self.parseExpression( mo.group(1) ) + '\n')
 				continue
 
@@ -665,14 +653,14 @@ class Perl2Python():
 			mo = re.match('^\s*[}]\s*$', line)
 			if mo:
 				#line = line.replace('}','')
-				tabCounter -= 1
+				self.tabCounter -= 1
 				continue
 
 			#end curly brace needs removal
 			mo = re.match('\s*{\s*$', line)
 			if mo:
 				#line = line.replace('{}}','')
-				#tabCounter -= 1
+				#self.tabCounter -= 1
 				continue
 
 			#ARRAY HANDLING
@@ -696,27 +684,37 @@ class Perl2Python():
 			# simple string
 			mo = re.match('^"(.*)', line)
 			if mo:
-				self.addIndent(tabCounter)
+				self.writeIndent()
 				self.write( line )
 				continue
 
 			# It is some thing else 
 			self.write( "#"+ line + '\n')
 
-def main():
+def _createParser():
+	parser = argparse.ArgumentParser(description='perl2python Commands help.')
+	parser.add_argument("-i", "--inputfile",
+						metavar=(('inputfile')),
+						required=True,
+						help="Perl file to be precessed.")
+	parser.add_argument("-o", "--ouputfile",
+						metavar=(('ouputfile')),
+						required=True,
+						help="Output python file name.")
+	return parser
 
-	inputFilePath = sys.argv[1]
+def main():
+	parser = _createParser()
+	args = parser.parse_args()
+
+	inputFilePath = args.inputfile
+	ouputFilePath = args.ouputfile
 	if not os.path.exists(inputFilePath):
-		print ("Error: input file ["+ inputFilePath + "] does not exist")
+		print ("Error: input file [{}] does not exist".format(inputFilePath))
 		exit(1)
 
-	#inputFile = open(inputFilePath)
-	#out = open('out.py','w+')
-	p2p = Perl2Python(inputFilePath,'out.py')
-	p2p.DoConversion()
+	pe2py = Perl2Python(inputFilePath, ouputFilePath)
+	pe2py.DoConversion()
 
 if __name__ == '__main__':
-	if len(sys.argv) <2:
-		print ("Error: Please provide input file")
-		exit(1) 
 	main()
